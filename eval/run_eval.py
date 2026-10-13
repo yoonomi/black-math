@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -19,10 +20,22 @@ RESULTS = ROOT / "eval" / "results.json"
 SAMPLE = ROOT / "data" / "samples" / "portraits_sample.md"
 
 
-def hit_at_1(pred: str, gold: str) -> int:
+def hit_keys(gold: str, aliases=None):
+    parts = [p.strip() for p in re.split(r"[，,、/]", gold or "") if p.strip()]
+    keys = list(aliases or []) + parts
+    if gold:
+        keys.append(gold)
+    # 去重并丢掉过短的碎片
+    seen = []
+    for k in keys:
+        if k and k not in seen:
+            seen.append(k)
+    return seen
+
+
+def hit_at_1(pred: str, gold: str, aliases=None) -> int:
     pred = pred or ""
-    keys = [p.strip() for p in gold.replace("、", ",").split(",") if p.strip()]
-    return int(any(k in pred for k in keys))
+    return int(any(k in pred for k in hit_keys(gold, aliases)))
 
 
 def f1_overlap(pred: str, gold: str) -> float:
@@ -85,7 +98,7 @@ def main():
                         "model": model,
                         "mode": mode,
                         "pred": pred,
-                        "hit": hit_at_1(pred, q["answer"]),
+                        "hit": hit_at_1(pred, q["answer"], q.get("aliases")),
                         "f1": round(f1_overlap(pred, q["answer"]), 4),
                         "citation": round(citation_cover(pred, q["entities"]), 4),
                         "latency_ms": latency,
@@ -95,6 +108,7 @@ def main():
                 print(q["id"], model, mode, rows[-1]["hit"], rows[-1]["latency_ms"])
 
     summary = {}
+    by_type = {}
     for row in rows:
         key = f"{row['model']}/{row['mode']}"
         bucket = summary.setdefault(
@@ -105,15 +119,25 @@ def main():
         bucket["f1"] += row["f1"]
         bucket["citation"] += row["citation"]
         bucket["latency_ms"] += row["latency_ms"]
+        tkey = f"{key}/{row['type']}"
+        tb = by_type.setdefault(tkey, {"n": 0, "hit": 0})
+        tb["n"] += 1
+        tb["hit"] += row["hit"]
     for bucket in summary.values():
         n = max(bucket["n"], 1)
         bucket["hit"] = round(bucket["hit"] / n, 4)
         bucket["f1"] = round(bucket["f1"] / n, 4)
         bucket["citation"] = round(bucket["citation"] / n, 4)
         bucket["latency_ms"] = int(bucket["latency_ms"] / n)
+    for tb in by_type.values():
+        tb["hit"] = round(tb["hit"] / max(tb["n"], 1), 4)
 
     RESULTS.write_text(
-        json.dumps({"summary": summary, "rows": rows}, ensure_ascii=False, indent=2),
+        json.dumps(
+            {"summary": summary, "by_type": by_type, "rows": rows},
+            ensure_ascii=False,
+            indent=2,
+        ),
         encoding="utf-8",
     )
     print("wrote", RESULTS)

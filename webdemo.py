@@ -90,15 +90,23 @@ def combined_response(history1, history2, user_input, model_label):
 
 
 def load_results():
+    empty = pd.DataFrame()
     if not RESULTS.exists():
-        empty = pd.DataFrame()
-        return empty, None, empty, "还没有 eval/results.json，请先运行 python eval/run_eval.py"
+        return empty, None, empty, empty, "还没有 eval/results.json，请先运行 python eval/run_eval.py"
     data = json.loads(RESULTS.read_text(encoding="utf-8"))
     summary_rows = []
     for key, val in data.get("summary", {}).items():
         model, mode = key.split("/", 1)
         summary_rows.append({"model": model, "mode": mode, **val})
     summary_df = pd.DataFrame(summary_rows)
+    type_rows = []
+    for key, val in data.get("by_type", {}).items():
+        parts = key.split("/")
+        if len(parts) == 3:
+            type_rows.append(
+                {"model": parts[0], "mode": parts[1], "type": parts[2], **val}
+            )
+    type_df = pd.DataFrame(type_rows)
     rows_df = pd.DataFrame(data.get("rows", []))
     chart = None
     if not summary_df.empty:
@@ -114,7 +122,7 @@ def load_results():
         axes[1].set_title("平均时延 ms")
         fig.tight_layout()
         chart = fig
-    return summary_df, chart, rows_df, "已加载评测结果"
+    return summary_df, chart, type_df, rows_df, "已加载评测结果"
 
 
 def question_compare(qid, rows_df):
@@ -158,13 +166,14 @@ with gr.Blocks() as demo:
             refresh = gr.Button("加载 results.json")
             summary_table = gr.Dataframe(label="模型 × 模式 汇总")
             hit_plot = gr.Plot(label="Hit@1 与时延")
+            type_table = gr.Dataframe(label="模型 × 模式 × 题型")
             rows_table = gr.Dataframe(label="逐题明细")
             status = gr.Textbox(label="状态", interactive=False)
             qid = gr.Textbox(label="题目 id，如 q1", placeholder="q1")
             compare_table = gr.Dataframe(label="该题三模型对照")
             refresh.click(
                 load_results,
-                outputs=[summary_table, hit_plot, rows_table, status],
+                outputs=[summary_table, hit_plot, type_table, rows_table, status],
             )
             qid.change(question_compare, inputs=[qid, rows_table], outputs=[compare_table])
 
