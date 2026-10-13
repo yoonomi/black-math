@@ -92,7 +92,7 @@ def combined_response(history1, history2, user_input, model_label):
 def load_results():
     if not RESULTS.exists():
         empty = pd.DataFrame()
-        return empty, empty, "还没有 eval/results.json，请先运行 python eval/run_eval.py"
+        return empty, None, empty, "还没有 eval/results.json，请先运行 python eval/run_eval.py"
     data = json.loads(RESULTS.read_text(encoding="utf-8"))
     summary_rows = []
     for key, val in data.get("summary", {}).items():
@@ -100,7 +100,21 @@ def load_results():
         summary_rows.append({"model": model, "mode": mode, **val})
     summary_df = pd.DataFrame(summary_rows)
     rows_df = pd.DataFrame(data.get("rows", []))
-    return summary_df, rows_df, "已加载评测结果"
+    chart = None
+    if not summary_df.empty:
+        import matplotlib.pyplot as plt
+
+        fig, axes = plt.subplots(1, 2, figsize=(8, 3.2))
+        pivot_hit = summary_df.pivot(index="model", columns="mode", values="hit")
+        pivot_hit.plot(kind="bar", ax=axes[0], rot=0)
+        axes[0].set_title("Hit@1")
+        axes[0].set_ylim(0, 1)
+        pivot_lat = summary_df.pivot(index="model", columns="mode", values="latency_ms")
+        pivot_lat.plot(kind="bar", ax=axes[1], rot=0)
+        axes[1].set_title("平均时延 ms")
+        fig.tight_layout()
+        chart = fig
+    return summary_df, chart, rows_df, "已加载评测结果"
 
 
 def question_compare(qid, rows_df):
@@ -143,11 +157,15 @@ with gr.Blocks() as demo:
         with gr.Tab("性能"):
             refresh = gr.Button("加载 results.json")
             summary_table = gr.Dataframe(label="模型 × 模式 汇总")
+            hit_plot = gr.Plot(label="Hit@1 与时延")
             rows_table = gr.Dataframe(label="逐题明细")
             status = gr.Textbox(label="状态", interactive=False)
             qid = gr.Textbox(label="题目 id，如 q1", placeholder="q1")
             compare_table = gr.Dataframe(label="该题三模型对照")
-            refresh.click(load_results, outputs=[summary_table, rows_table, status])
+            refresh.click(
+                load_results,
+                outputs=[summary_table, hit_plot, rows_table, status],
+            )
             qid.change(question_compare, inputs=[qid, rows_table], outputs=[compare_table])
 
 if __name__ == "__main__":
