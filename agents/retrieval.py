@@ -11,18 +11,39 @@ REL_WORDS = ("部下", "从属", "交手", "同属", "位于", "交好", "相关
 def _names_from(text: str) -> List[str]:
     known = [
         "孙悟空",
-        "二郎神",
-        "二郎显圣真君",
+        "天命人",
         "黑风大王",
+        "黑熊精",
         "黑风山土地",
         "白衣秀士",
         "灵吉菩萨",
+        "灵虚子",
+        "金池长老",
+        "黄风大圣",
         "黄风大王",
-        "黄风岭土地",
+        "石先锋",
+        "虎先锋",
+        "小西天土地",
+        "无头僧",
+        "黄眉",
+        "亢金龙",
+        "不白",
+        "不空",
+        "不净",
+        "不能",
+        "广智",
+        "广谋",
+        "牯护院",
+        "沙大郎",
+        "沙国王",
         "黑风山",
         "黄风岭",
+        "小西天",
+        "观音禅院",
     ]
-    return [n for n in known if n in text]
+    hits = [n for n in known if n in text]
+    hits.sort(key=len, reverse=True)
+    return hits
 
 
 def retrieve(subquestion: str, graph: TinyGraph, evidence: Evidence) -> None:

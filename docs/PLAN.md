@@ -9,7 +9,7 @@
 | S1 | conda/venv、`.env`、Neo4j、智谱 predict | 完成 |
 | S2 | 修 webdemo 基座覆盖、Key 名、增量抽块 | 完成 |
 | S3 | `factory` + DeepSeek + Grok 适配器 | 完成（Grok Key 无效，界面已隐藏） |
-| S4 | 样例图谱 8 人，29 实体 / 49 三元组 | 完成 |
+| S4 | 前三章图谱约 441 实体 / 910 边 | 完成 |
 | S5 | Gradio 问答页，智谱 / DeepSeek 对照 | 完成 |
 | S6 | Planner / Dual-Retrieval / Verifier | 完成 |
 | S7 | 封闭题集 | 完成（14 题） |

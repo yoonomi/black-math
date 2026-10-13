@@ -6,6 +6,7 @@ import gradio as gr
 import pandas as pd
 
 from agents.loop import ask
+from agents.vis import triples_figure
 from graphrag.config import get_chat_llm, get_embedding, load_env, neo4j_conf
 from graphrag.graph import TinyGraph
 from graphrag.llm.factory import available_llms, provider_status
@@ -13,7 +14,9 @@ from graphrag.llm.factory import available_llms, provider_status
 load_env()
 
 ROOT = Path(__file__).resolve().parent
-SAMPLE = str(ROOT / "data" / "samples" / "portraits_sample.md")
+SAMPLE = str(ROOT / "data" / "samples" / "portraits_ch1_3.md")
+if not Path(SAMPLE).exists():
+    SAMPLE = str(ROOT / "data" / "samples" / "portraits_sample.md")
 RESULTS = ROOT / "eval" / "results.json"
 
 graph = None
@@ -40,16 +43,27 @@ def _llm(label: str):
     return chat_llms[key]
 
 
-def init_graph(data_path):
+def _graph_stats():
+    if graph is None:
+        return "未连接"
+    with graph.driver.session() as s:
+        n = s.run("MATCH (e:Entity) RETURN count(e) AS c").single()["c"]
+        r = s.run("MATCH ()-[rel]->() RETURN count(rel) AS c").single()["c"]
+    return f"实体 {n}，关系 {r}"
+
+
+def init_graph(data_path, rebuild):
     global graph
     path = (data_path or "").strip() or SAMPLE
-    if not os.path.exists(path):
-        return f"找不到文件: {path}"
     try:
         url, user, password = neo4j_conf()
         graph = TinyGraph(url, user, password, get_chat_llm("zhipu"), get_embedding())
-        graph.add_document(path)
-        return f"已加载 {path}，可用模型: {', '.join(available_llms())}"
+        if rebuild:
+            if not os.path.exists(path):
+                return f"找不到文件: {path}"
+            graph.add_document(path)
+            return f"已建图 {path}。{_graph_stats()}。模型: {', '.join(available_llms())}"
+        return f"已连接 Neo4j。{_graph_stats()}。模型: {', '.join(available_llms())}。默认语料 {path}"
     except Exception as e:
         return f"初始化失败: {e}"
 
@@ -57,19 +71,34 @@ def init_graph(data_path):
 def combined_response(history1, history2, user_input, model_label):
     history1 = history1 or []
     history2 = history2 or []
+    empty_df = pd.DataFrame()
+    empty_fig = triples_figure([])
     if not user_input:
-        return history1, history2, "", "请输入问题"
+        return history1, history2, "", "请输入问题", empty_df, empty_df, empty_fig
     if graph is None:
-        return history1, history2, "", "请先初始化 GraphRAG"
+        return history1, history2, "", "请先点「连接图谱」", empty_df, empty_df, empty_fig
     llm = _llm(model_label)
     graph.llm = llm
+    extra = ""
+    ent_df = empty_df
+    tri_df = empty_df
+    fig = empty_fig
     try:
         packed = ask(user_input, graph, llm)
         left = packed["answer"]
         path = " → ".join(packed.get("path") or [])
-        cites = ", ".join(packed.get("cites") or [])
-        extra = f"\n\n路径: {path}\n实体: {cites}\n时延: {packed.get('latency_ms')} ms"
-        left = left + extra
+        cites = list(dict.fromkeys(packed.get("cites") or []))
+        triples = packed.get("triples") or []
+        extra = (
+            f"校验: {packed.get('mark')}  |  轮次: {packed.get('rounds')}  |  "
+            f"时延: {packed.get('latency_ms')} ms\n"
+            f"子问题: {path or '（无）'}\n"
+            f"引用实体: {', '.join(cites) or '（无）'}"
+        )
+        ent_df = pd.DataFrame({"实体": cites})
+        if triples:
+            tri_df = pd.DataFrame(triples)
+        fig = triples_figure(triples, title=f"检索子图 · {model_label}")
     except Exception as e:
         left = f"GraphRAG 失败: {e}"
         extra = str(e)
@@ -77,7 +106,6 @@ def combined_response(history1, history2, user_input, model_label):
         right = llm.predict(user_input)
     except Exception as e:
         right = f"纯生成失败: {e}"
-        extra = str(e)
     history1 = history1 + [
         {"role": "user", "content": user_input},
         {"role": "assistant", "content": left},
@@ -86,7 +114,7 @@ def combined_response(history1, history2, user_input, model_label):
         {"role": "user", "content": user_input},
         {"role": "assistant", "content": right},
     ]
-    return history1, history2, "", extra
+    return history1, history2, "", extra, ent_df, tri_df, fig
 
 
 def load_results():
@@ -137,8 +165,17 @@ def question_compare(qid, rows_df):
 
 TITLE = """
 # 影神图多智能体问答评测台
-同一套图谱上切换智谱 / DeepSeek / Grok，对照 GraphRAG 与纯生成。
+前三章图谱（黑风山 / 黄风岭 / 小西天）。先点「连接图谱」，再提问。
+左栏 GraphRAG，右栏同模型纯生成；下方展示检索子图、实体和三元组。
 """
+
+EXAMPLES = [
+    "黑风山土地是谁？",
+    "黑风大王和白衣秀士是什么关系？",
+    "哪些妖怪曾与孙悟空交过手？",
+    "黄眉是谁？",
+    "广智和广谋是什么来历？",
+]
 
 with gr.Blocks() as demo:
     gr.Markdown(TITLE)
@@ -146,20 +183,36 @@ with gr.Blocks() as demo:
         with gr.Tab("问答"):
             model_dd = gr.Radio(CHOICES, value=CHOICES[0], label="问答模型")
             with gr.Row():
-                data_path = gr.Textbox(label="数据路径", value=SAMPLE)
-                update_button = gr.Button("初始化 GraphRAG")
-                init_message = gr.Textbox(label="初始化提示", interactive=False)
+                data_path = gr.Textbox(label="语料路径（仅勾选重建时使用）", value=SAMPLE)
+                rebuild = gr.Checkbox(label="重建图谱（耗时长）", value=False)
+                update_button = gr.Button("连接图谱", variant="primary")
+            init_message = gr.Textbox(label="图谱状态", interactive=False)
             with gr.Row():
-                chatbot1 = gr.Chatbot(label="GraphRAG 多智能体", height=420)
-                chatbot2 = gr.Chatbot(label="同模型纯生成", height=420)
-            user_input = gr.Textbox(placeholder="例如：黑风山土地是谁？", lines=1, label="问题")
-            send_button = gr.Button("发送")
-            path_box = gr.Textbox(label="推理路径 / 引用", interactive=False, lines=4)
-            update_button.click(init_graph, inputs=[data_path], outputs=[init_message])
+                chatbot1 = gr.Chatbot(label="GraphRAG 多智能体", height=380)
+                chatbot2 = gr.Chatbot(label="同模型纯生成", height=380)
+            user_input = gr.Textbox(placeholder="例如：黄眉是谁？", lines=1, label="问题")
+            send_button = gr.Button("发送", variant="primary")
+            gr.Examples(examples=EXAMPLES, inputs=user_input)
+            path_box = gr.Textbox(label="推理过程", interactive=False, lines=4)
+            graph_plot = gr.Plot(label="本轮检索子图")
+            with gr.Row():
+                ent_table = gr.Dataframe(label="命中实体")
+                tri_table = gr.Dataframe(label="命中三元组")
+            update_button.click(
+                init_graph, inputs=[data_path, rebuild], outputs=[init_message]
+            )
             send_button.click(
                 combined_response,
                 inputs=[chatbot1, chatbot2, user_input, model_dd],
-                outputs=[chatbot1, chatbot2, user_input, path_box],
+                outputs=[
+                    chatbot1,
+                    chatbot2,
+                    user_input,
+                    path_box,
+                    ent_table,
+                    tri_table,
+                    graph_plot,
+                ],
             )
 
         with gr.Tab("性能"):
@@ -178,4 +231,4 @@ with gr.Blocks() as demo:
             qid.change(question_compare, inputs=[qid, rows_table], outputs=[compare_table])
 
 if __name__ == "__main__":
-    demo.launch()
+    demo.launch(theme=gr.themes.Soft())

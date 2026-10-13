@@ -17,7 +17,9 @@ from agents.loop import ask
 
 QUESTIONS = ROOT / "eval" / "questions.json"
 RESULTS = ROOT / "eval" / "results.json"
-SAMPLE = ROOT / "data" / "samples" / "portraits_sample.md"
+SAMPLE = ROOT / "data" / "samples" / "portraits_ch1_3.md"
+if not SAMPLE.exists():
+    SAMPLE = ROOT / "data" / "samples" / "portraits_sample.md"
 
 
 def hit_keys(gold: str, aliases=None):

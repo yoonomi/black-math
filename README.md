@@ -24,7 +24,7 @@ copy .env.example .env
 .venv\Scripts\python graphdemo.py
 ```
 
-样例语料：`data/samples/portraits_sample.md`。
+默认语料：前三章 `data/samples/portraits_ch1_3.md`（黑风山 / 黄风岭 / 小西天）。网页点「连接图谱」即可，不必重建。
 
 ## 网页
 
