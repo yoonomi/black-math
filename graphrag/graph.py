@@ -57,9 +57,8 @@ class TinyGraph:
         - emb: 嵌入模型（Embedding）实例
         - working_dir: 工作目录，默认为"workspace"
         """
-        self.driver = driver = GraphDatabase.driver(
-            url, auth=(username, password)
-        )  # 创建Neo4j数据库驱动
+        auth = None if not password else (username, password)
+        self.driver = driver = GraphDatabase.driver(url, auth=auth)
         self.llm = llm  # 设置语言模型
         self.embedding = emb  # 设置嵌入模型
         self.working_dir = working_dir  # 设置工作目录
@@ -266,7 +265,7 @@ class TinyGraph:
         all_triplets = []
 
         for chunk_id, chunk_content in tqdm(
-            all_chunks.items(), desc=f"Processing '{filepath}'"
+            new_chunks.items(), desc=f"Processing '{filepath}'"
         ):
             try:
                 entities = self.get_entity(chunk_content, chunk_id=chunk_id)
@@ -366,7 +365,7 @@ class TinyGraph:
         print(f"doc '{filepath}' has been loaded.")
 
     def detect_communities(self) -> None:
-        query = """
+        project = """
         CALL gds.graph.project(
             'graph_help',
             ['Entity'],
@@ -377,10 +376,7 @@ class TinyGraph:
             }
         )
         """
-        with self.driver.session() as session:
-            result = session.run(query)
-
-        query = """
+        leiden = """
         CALL gds.leiden.write('graph_help', {
             writeProperty: 'communityIds',
             includeIntermediateCommunities: True,
@@ -392,12 +388,63 @@ class TinyGraph:
         YIELD communityCount, modularity, modularities
         """
         with self.driver.session() as session:
-            result = session.run(query)
-            for record in result:
-                print(
-                    f"社区数量: {record['communityCount']}, 模块度: {record['modularity']}"
+            try:
+                session.run("CALL gds.graph.drop('graph_help', false)")
+            except Exception:
+                pass
+            try:
+                session.run(project)
+                result = session.run(leiden)
+                for record in result:
+                    print(
+                        f"社区数量: {record['communityCount']}, 模块度: {record['modularity']}"
+                    )
+            except Exception as e:
+                print(f"GDS 社区发现失败，回退为单一社区: {e}")
+                session.run(
+                    "MATCH (n:Entity) SET n.communityIds = [0]"
                 )
-            session.run("CALL gds.graph.drop('graph_help')")
+            finally:
+                try:
+                    session.run("CALL gds.graph.drop('graph_help', false)")
+                except Exception:
+                    pass
+
+    def graph_query(self, name: str, hops: int = 2, limit: int = 30) -> list:
+        hops = max(1, min(int(hops), 3))
+        query = f"""
+        MATCH (start:Entity)
+        WHERE start.name CONTAINS $name
+        MATCH path = (start)-[*1..{hops}]-(other:Entity)
+        WITH start, other, relationships(path) AS rels
+        UNWIND rels AS r
+        WITH start, other, r, startNode(r) AS a, endNode(r) AS b
+        RETURN DISTINCT a.name AS src, r.name AS rel, b.name AS dst
+        LIMIT $limit
+        """
+        rows = []
+        with self.driver.session() as session:
+            result = session.run(query, name=name, limit=limit)
+            for record in result:
+                rows.append(
+                    {
+                        "src": record["src"],
+                        "rel": record["rel"],
+                        "dst": record["dst"],
+                    }
+                )
+        return rows
+
+    def search_entities(self, name: str, limit: int = 8) -> list:
+        query = """
+        MATCH (n:Entity)
+        WHERE n.name CONTAINS $name
+        RETURN n.name AS name, n.description AS description, n.entity_id AS entity_id
+        LIMIT $limit
+        """
+        with self.driver.session() as session:
+            result = session.run(query, name=name, limit=limit)
+            return [dict(record) for record in result]
 
     def get_entity_by_name(self, name):
         query = """
@@ -444,7 +491,7 @@ class TinyGraph:
                 """
                 session.run(update_query, id=id, embedding=embedding)
 
-    def get_topk_similar_entities(self, input_emb, k=1) -> List[Node]:
+    def get_topk_similar_entities(self, input_emb, k=5) -> List[Node]:
         res = []
         query = """
         MATCH (n)

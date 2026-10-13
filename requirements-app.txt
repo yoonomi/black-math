@@ -1,0 +1,9 @@
+zhipuai>=2.1.5
+neo4j>=5.26.0
+tqdm>=4.67.0
+numpy>=1.24.4
+gradio>=4.44.1
+python-dotenv>=1.0.1
+beautifulsoup4>=4.12.3
+requests>=2.32.3
+openai>=1.40.0

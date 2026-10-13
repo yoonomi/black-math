@@ -1,0 +1,60 @@
+{
+  "questions": [
+    {
+      "id": "q1",
+      "type": "fact",
+      "query": "黑风山土地是谁？",
+      "answer": "黑风山地界的土地公",
+      "entities": ["黑风山土地", "黑风山"]
+    },
+    {
+      "id": "q2",
+      "type": "fact",
+      "query": "白衣秀士是什么妖怪？",
+      "answer": "狼妖",
+      "entities": ["白衣秀士"]
+    },
+    {
+      "id": "q3",
+      "type": "fact",
+      "query": "黑风大王是谁？",
+      "answer": "黑熊精",
+      "entities": ["黑风大王"]
+    },
+    {
+      "id": "q4",
+      "type": "fact",
+      "query": "黄风大王占据哪里？",
+      "answer": "黄风岭",
+      "entities": ["黄风大王", "黄风岭"]
+    },
+    {
+      "id": "q5",
+      "type": "hop",
+      "query": "黑风大王和白衣秀士是什么关系？",
+      "answer": "交好",
+      "entities": ["黑风大王", "白衣秀士"]
+    },
+    {
+      "id": "q6",
+      "type": "hop",
+      "query": "哪些头目曾与孙悟空交过手？",
+      "answer": "黑风大王、黄风大王",
+      "entities": ["孙悟空", "黑风大王", "黄风大王"]
+    },
+    {
+      "id": "q7",
+      "type": "compare",
+      "query": "黑风山土地和黄风岭土地有什么共同点？",
+      "answer": "都是土地神，分管不同山头",
+      "entities": ["黑风山土地", "黄风岭土地"]
+    },
+    {
+      "id": "q8",
+      "type": "compare",
+      "query": "二郎显圣真君和孙悟空是什么关系？",
+      "answer": "有旧怨与交手",
+      "entities": ["二郎显圣真君", "孙悟空"]
+    }
+  ]
+}
