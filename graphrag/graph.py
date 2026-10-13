@@ -132,16 +132,21 @@ class TinyGraph:
             content = file.read()  # 读取文件内容
 
         text_segments = []  # 用于存储分割后的文本片段
-        start_index = 0  # 初始化起始索引
+        if "## 影神图角色" in content:
+            import re as _re
 
-        # 循环分割文本，直到剩余文本长度不足以形成新的片段
-        while start_index + segment_length <= len(content):
-            text_segments.append(content[start_index : start_index + segment_length])
-            start_index += segment_length - overlap_length  # 更新起始索引，考虑重叠长度
-
-        # 处理剩余的文本，如果剩余文本长度小于segment_length但大于0
-        if start_index < len(content):
-            text_segments.append(content[start_index:])
+            text_segments = [
+                part.strip()
+                for part in _re.split(r"(?=## 影神图角色)", content)
+                if part.strip()
+            ]
+        else:
+            start_index = 0  # 初始化起始索引
+            while start_index + segment_length <= len(content):
+                text_segments.append(content[start_index : start_index + segment_length])
+                start_index += segment_length - overlap_length
+            if start_index < len(content):
+                text_segments.append(content[start_index:])
 
         # 为每个片段生成唯一的ID，并将其存储在字典中
         for segement in text_segments:
@@ -237,12 +242,7 @@ class TinyGraph:
         - filepath: 要添加的文档的路径
         - use_llm_deambiguation: 是否使用LLM进行实体消岐
         """
-        # ================ Check if the document has been loaded ================
-        if filepath in self.get_loaded_documents():
-            print(
-                f"Document '{filepath}' has already been loaded, skipping import process."
-            )
-            return
+        # 已加载过的文档仍检查是否有新块（全量抓取失败后可补录）
 
         # ================ Chunking ================
         chunks = self.split_text(filepath)

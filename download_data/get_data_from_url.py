@@ -1,55 +1,63 @@
+import json
 import os
 import re
-import json
+import time
+from pathlib import Path
+
 import requests
 from bs4 import BeautifulSoup
 from file_operation import _create_file_if_not_exists, _create_folder_if_not_exists
 
+ROOT = Path(__file__).resolve().parents[1]
+DATA_DIR = ROOT / "data"
+MD_PATH = DATA_DIR / "portraits.md"
+PROGRESS_PATH = Path(__file__).resolve().parent / "fetch_progress.json"
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+}
 
-def get_description(url):
-    # 目标URL
-    # url = 'https://www.gamersky.com/handbook/202408/1803371_24.shtml'
 
-    # 使用 requests 获取网页内容
-    response = requests.get(url)
-    html = response.content
+def load_progress():
+    if PROGRESS_PATH.exists():
+        return json.loads(PROGRESS_PATH.read_text(encoding="utf-8"))
+    return {"done": [], "failed": []}
 
-    # 使用 BeautifulSoup 解析 HTML
-    soup = BeautifulSoup(html, 'html.parser')
 
-    # 提取 GsWeTxt1 类中的文本
-    character_name = soup.find('div', class_='GsWeTxt1').get_text()
+def save_progress(progress):
+    PROGRESS_PATH.write_text(json.dumps(progress, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    # 正则表达式，用于匹配“第X页：”的文本模式
-    page_pattern = re.compile(r'^第\d+页：')
 
-    # 提取 GsWeTxt1 后的所有 <p> 标签
+def get_description(url: str) -> str:
+    last_error = None
+    for attempt in range(4):
+        try:
+            response = requests.get(url, headers=HEADERS, timeout=30)
+            response.raise_for_status()
+            break
+        except Exception as e:
+            last_error = e
+            time.sleep(1.5 * (attempt + 1))
+    else:
+        raise last_error
+    soup = BeautifulSoup(response.content, "html.parser")
+    page_pattern = re.compile(r"^第\d+页：")
     description = []
-    for p in soup.find_all('p'):
-        # 检查是否包含“第X页”模式的文本，并跳过
-        if page_pattern.match(p.get_text()):
+    for p in soup.find_all("p"):
+        text = p.get_text()
+        if page_pattern.match(text):
             continue
-        # 检查是否包含“点击进入”的链接
-        if p.find('a') and '点击进入' in p.get_text():
+        if p.find("a") and "点击进入" in text:
             break
-        # 检查是否有 GsImageLabel 类
-        if 'GsImageLabel' in p.get('class', []):
+        if "GsImageLabel" in p.get("class", []):
             break
-        # 提取 <p> 标签的内容并添加换行符
-        description.append(p.get_text()+ '\n\n')
-
-    # 将提取的文本组合起来
-    description_text = ''.join(description)  # 使用 ''.join 保持每行的换行符
-
-    return description_text
+        if text.strip():
+            description.append(text.strip() + "\n\n")
+    return "".join(description).strip()
 
 
 def write2md(role, level, description):
-    # 定义变量，创建目录与文件
-    markdown_file = "../data/portraits.md"
-    _create_file_if_not_exists(markdown_file)
-
-    # 生成 Markdown 内容（Markdown模板内容需要置前排列,否则写入文件会以代码块展示）
+    _create_folder_if_not_exists(str(DATA_DIR))
+    _create_file_if_not_exists(str(MD_PATH))
     markdown_content = f"""
 ## 影神图角色
 
@@ -62,25 +70,46 @@ def write2md(role, level, description):
 ### 描述
 
 {description}
-    """
 
-    # 将 Markdown 内容写入文件
-    with open(markdown_file, "a", encoding="utf-8") as file:
+"""
+    with open(MD_PATH, "a", encoding="utf-8") as file:
         file.write(markdown_content)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
+    roleinfo_config = Path(__file__).resolve().parent / "roleinfo.json"
+    roleinfo_dict = json.loads(roleinfo_config.read_text(encoding="utf-8"))
+    progress = load_progress()
+    done = set(progress.get("done") or [])
+    failed = progress.setdefault("failed", [])
 
-    # _create_folder_if_not_exists('../data/portraits')
-    roleinfo_config = r"./roleinfo.json"
-    with open (roleinfo_config, 'r', encoding='utf-8') as file:
-        roleinfo = file.read()
-    roleinfo_dict = json.loads(roleinfo)
-
+    total = sum(len(v) for v in roleinfo_dict.values())
+    n = 0
     for level, items in roleinfo_dict.items():
-        print(f"类型: {level}")
         for item in items:
-            role = item['role']
-            url = item['url']
-            description = get_description(url)
-            write2md(role, level, description)
+            n += 1
+            role = item["role"]
+            url = item["url"]
+            key = f"{level}:{role}"
+            if key in done:
+                print(f"[{n}/{total}] skip {key}")
+                continue
+            try:
+                description = get_description(url)
+                if not description:
+                    raise ValueError("empty description")
+                write2md(role, level, description)
+                done.add(key)
+                progress["done"] = sorted(done)
+                progress["failed"] = [f for f in failed if f.get("key") != key]
+                failed[:] = progress["failed"]
+                save_progress(progress)
+                print(f"[{n}/{total}] ok {key} chars={len(description)}")
+            except Exception as e:
+                failed.append({"key": key, "url": url, "error": str(e)})
+                progress["failed"] = failed
+                save_progress(progress)
+                print(f"[{n}/{total}] FAIL {key}: {e}")
+            time.sleep(0.4)
+
+    print("done", len(done), "failed", len(failed), "md", MD_PATH, "size", MD_PATH.stat().st_size if MD_PATH.exists() else 0)

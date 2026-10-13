@@ -1,5 +1,8 @@
+import time
+from typing import Any, Dict, Optional
+
 from zhipuai import ZhipuAI
-from typing import Any, Optional, Dict
+
 from .base import BaseLLM
 
 
@@ -25,8 +28,15 @@ class zhipuLLM(BaseLLM):
         Returns:
             str: The response from the zhipuai model.
         """
-        response = self.client.chat.completions.create(
-            model=self.model_name,
-            messages=[{"role": "user", "content": input}],
-        )
-        return response.choices[0].message.content
+        last_error = None
+        for attempt in range(4):
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.model_name,
+                    messages=[{"role": "user", "content": input}],
+                )
+                return response.choices[0].message.content
+            except Exception as e:
+                last_error = e
+                time.sleep(2**attempt)
+        raise last_error
