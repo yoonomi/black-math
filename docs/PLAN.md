@@ -1,15 +1,21 @@
 # 项目计划（可更新）
 
-完整步骤与状态见会话计划。仓库内按此执行：
+仓库：`F:\Working\black math`  
+远程：https://github.com/yoonomi/black-math
 
-1. S0 grilling skill（用户级）
-2. S1 环境与 Key
-3. S2 修上游缺陷
-4. S3 三模型工厂
-5. S4 样例图谱
-6. S5 问答页
-7. S6 智能体
-8. S7–S9 评测与性能页
-9. S11 README 与推送
+| 步骤 | 内容 | 状态 |
+| --- | --- | --- |
+| S0 | grilling / grill-me 装到 `~/.grok/skills` | 完成 |
+| S1 | conda/venv、`.env`、Neo4j、智谱 predict | 完成 |
+| S2 | 修 webdemo 基座覆盖、Key 名、增量抽块 | 完成 |
+| S3 | `factory` + DeepSeek + Grok 适配器 | 完成（Grok Key 无效，界面已隐藏） |
+| S4 | 样例图谱 8 人，29 实体 / 49 三元组 | 完成 |
+| S5 | Gradio 问答页，智谱 / DeepSeek 对照 | 完成 |
+| S6 | Planner / Dual-Retrieval / Verifier | 完成 |
+| S7 | 封闭题集 | 完成（14 题） |
+| S8 | `eval/run_eval.py` | 完成 |
+| S9 | 性能页表 + Hit@1/时延柱状图 | 完成 |
+| S10 | 全量影神图 | 不做（不挡演示） |
+| S11 | README、设计报告、推送 | 完成 |
 
-改范围时先改本文件再改代码。
+改范围：先改本文件，再改代码。

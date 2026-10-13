@@ -43,7 +43,7 @@ copy .env.example .env
 .venv\Scripts\python eval/run_eval.py
 ```
 
-结果写入 `eval/results.json`。
+结果写入 `eval/results.json`。设计报告见 `docs/设计报告.md`。
 
 ## 说明
 
