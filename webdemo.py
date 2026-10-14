@@ -1,12 +1,13 @@
 import json
 import os
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import gradio as gr
 import pandas as pd
 
 from agents.loop import ask
-from agents.vis import triples_figure
+from agents.vis import cjk_font, triples_figure
 from graphrag.config import get_chat_llm, get_embedding, load_env, neo4j_conf
 from graphrag.graph import TinyGraph
 from graphrag.llm.factory import available_llms, provider_status
@@ -83,8 +84,30 @@ def combined_response(history1, history2, user_input, model_label):
     ent_df = empty_df
     tri_df = empty_df
     fig = empty_fig
-    try:
-        packed = ask(user_input, graph, llm)
+    packed = None
+    left = ""
+    right = ""
+
+    def _run_graph():
+        return ask(user_input, graph, llm)
+
+    def _run_plain():
+        return llm.predict(user_input)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        fut_graph = pool.submit(_run_graph)
+        fut_plain = pool.submit(_run_plain)
+        try:
+            packed = fut_graph.result()
+        except Exception as e:
+            left = f"GraphRAG 失败: {e}"
+            extra = str(e)
+        try:
+            right = fut_plain.result()
+        except Exception as e:
+            right = f"纯生成失败: {e}"
+
+    if packed is not None:
         left = packed["answer"]
         path = " → ".join(packed.get("path") or [])
         cites = list(dict.fromkeys(packed.get("cites") or []))
@@ -99,13 +122,6 @@ def combined_response(history1, history2, user_input, model_label):
         if triples:
             tri_df = pd.DataFrame(triples)
         fig = triples_figure(triples, title=f"检索子图 · {model_label}")
-    except Exception as e:
-        left = f"GraphRAG 失败: {e}"
-        extra = str(e)
-    try:
-        right = llm.predict(user_input)
-    except Exception as e:
-        right = f"纯生成失败: {e}"
     history1 = history1 + [
         {"role": "user", "content": user_input},
         {"role": "assistant", "content": left},
@@ -140,14 +156,15 @@ def load_results():
     if not summary_df.empty:
         import matplotlib.pyplot as plt
 
+        font = cjk_font()
         fig, axes = plt.subplots(1, 2, figsize=(8, 3.2))
         pivot_hit = summary_df.pivot(index="model", columns="mode", values="hit")
         pivot_hit.plot(kind="bar", ax=axes[0], rot=0)
-        axes[0].set_title("Hit@1")
+        axes[0].set_title("Hit@1", fontproperties=font)
         axes[0].set_ylim(0, 1)
         pivot_lat = summary_df.pivot(index="model", columns="mode", values="latency_ms")
         pivot_lat.plot(kind="bar", ax=axes[1], rot=0)
-        axes[1].set_title("平均时延 ms")
+        axes[1].set_title("平均时延 ms", fontproperties=font)
         fig.tight_layout()
         chart = fig
     return summary_df, chart, type_df, rows_df, "已加载评测结果"
