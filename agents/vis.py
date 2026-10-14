@@ -133,7 +133,7 @@ def compare_bars(summary_rows):
 
     fig, axes = plt.subplots(1, 3, figsize=(11.5, 3.6))
     x = np.arange(len(names))
-    colors = ["#c9a227", "#5b8c5a", "#6b4c3b", "#3d6b8c"][: len(names)]
+    colors = ["#c9a227", "#8a7a5a", "#3d6b8c", "#5b8c5a", "#a65d3f", "#6b5b95"][: len(names)]
 
     specs = [
         (hits, "正确率 Hit@1", 1.05),
@@ -171,7 +171,7 @@ def compare_radar(summary_rows):
 
     lats = [max(float(r.get("latency_ms") or 1), 1) for r in summary_rows]
     fastest = min(lats)
-    colors = ["#c9a227", "#8a7a5a", "#3d6b8c", "#5b8c5a"]
+    colors = ["#c9a227", "#8a7a5a", "#3d6b8c", "#5b8c5a", "#a65d3f", "#6b5b95"]
 
     for i, row in enumerate(summary_rows):
         speed = fastest / max(float(row.get("latency_ms") or 1), 1)
@@ -220,7 +220,7 @@ def type_bars(type_rows):
     names = list(series.keys())
     x = np.arange(len(types))
     width = 0.8 / max(len(names), 1)
-    colors = ["#c9a227", "#8a7a5a", "#3d6b8c", "#5b8c5a"]
+    colors = ["#c9a227", "#8a7a5a", "#3d6b8c", "#5b8c5a", "#a65d3f", "#6b5b95"]
     for i, name in enumerate(names):
         vals = [series[name].get(t, 0) for t in types]
         ax.bar(x + i * width, vals, width=width, label=name, color=colors[i % len(colors)])
