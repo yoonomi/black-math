@@ -23,5 +23,6 @@ class QwenLLM(BaseLLM):
         response = self.client.chat.completions.create(
             model=self.model_name,
             messages=[{"role": "user", "content": input}],
+            extra_body={"enable_thinking": False},
         )
         return response.choices[0].message.content or ""

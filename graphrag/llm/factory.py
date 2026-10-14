@@ -8,7 +8,7 @@ from .zhipu import zhipuLLM
 PROVIDERS = {
     "zhipu": {"env": "ZHIPU_API_KEY", "model_env": "ZHIPU_MODEL", "default_model": "glm-4-flash"},
     "deepseek": {"env": "DEEPSEEK_API_KEY", "model_env": "DEEPSEEK_MODEL", "default_model": "deepseek-chat"},
-    "qwen": {"env": "DASHSCOPE_API_KEY", "model_env": "QWEN_MODEL", "default_model": "qwen3.5-plus"},
+    "qwen": {"env": "DASHSCOPE_API_KEY", "model_env": "QWEN_MODEL", "default_model": "qwen3.5-flash"},
     "grok": {"env": "XAI_API_KEY", "model_env": "GROK_MODEL", "default_model": "grok-4"},
 }
 
