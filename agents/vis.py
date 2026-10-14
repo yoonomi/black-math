@@ -265,7 +265,7 @@ def overall_findings(summary_rows) -> str:
 
 1. **综合能力**：{rank_line}。DeepSeek 又准又快，总分第一；千问引用最好；智谱综合第三。
 2. **基线越弱，GraphRAG 提升越大**：纯生成 Hit@1 最低的是 **{weak['智能体']}（{weak['plain_hit']:.0%}）**，接上图谱后提升 **{weak['相对纯生成提升']:.0%}**；最强基线 **{strong['智能体']}（{strong['plain_hit']:.0%}）** 只再提升 **{strong['相对纯生成提升']:.0%}**。弱模型更容易把《西游记》常识当成游戏设定，图谱约束的收益更明显。
-3. **正确率**：GraphRAG 下 {top['智能体']} 与并列最高者 Hit@1 约 **{max(r['正确率'] for r in rows):.0%}**。三家 GraphRAG 都高于各自纯生成。
+3. **正确率**：GraphRAG 最高约 **{max(r['正确率'] for r in rows):.0%}**（{ '、'.join(r['智能体'] for r in rows if r['正确率'] == max(x['正确率'] for x in rows)) } 并列）。三家 GraphRAG 都高于各自纯生成。
 4. **图谱质量**：引用覆盖最高的是 **{cite_top['智能体']}（{cite_top['图谱引用']:.0%}）**，答案更常点名影神图实体。
 5. **速度**：DeepSeek GraphRAG 在三家里最快；千问已关闭思考链，仍慢于智谱/DeepSeek。
 6. 增益来自检索约束，不是某一家 API 单独变强：同一模型「有图谱 / 无图谱」对照均成立。
