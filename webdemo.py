@@ -11,6 +11,7 @@ from agents.vis import (
     compare_bars,
     compare_radar,
     overall_dashboard,
+    overall_findings,
     overall_table_rows,
     triples_figure,
     type_bars,
@@ -144,6 +145,7 @@ def load_results():
     empty = pd.DataFrame()
     if not RESULTS.exists():
         return (
+            "还没有评测文件。",
             empty,
             empty,
             None,
@@ -174,7 +176,9 @@ def load_results():
     bars = compare_bars(summary_rows)
     radar = compare_radar(summary_rows)
     types = type_bars(type_rows)
+    findings = overall_findings(summary_rows)
     return (
+        findings,
         overall_df,
         overall,
         summary_df,
@@ -183,7 +187,7 @@ def load_results():
         types,
         type_df,
         rows_df,
-        "已加载：三家 GraphRAG 综合分 + 分项对照",
+        "已加载：综合结论 + 三家排名",
     )
 
 
@@ -257,6 +261,7 @@ with gr.Blocks() as demo:
             )
             refresh = gr.Button("加载评测结果", variant="primary")
             status = gr.Textbox(label="状态", interactive=False)
+            findings_md = gr.Markdown()
             overall_table = gr.Dataframe(label="三家智能体综合排名")
             overall_plot = gr.Plot(label="综合能力：排名 · 画像 · 相对纯生成增益")
             summary_table = gr.Dataframe(label="六路明细：Hit@1 / F1 / 引用 / 时延")
@@ -271,6 +276,7 @@ with gr.Blocks() as demo:
             refresh.click(
                 load_results,
                 outputs=[
+                    findings_md,
                     overall_table,
                     overall_plot,
                     summary_table,
