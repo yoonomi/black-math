@@ -7,7 +7,14 @@ import gradio as gr
 import pandas as pd
 
 from agents.loop import ask
-from agents.vis import compare_bars, compare_radar, triples_figure, type_bars
+from agents.vis import (
+    compare_bars,
+    compare_radar,
+    overall_dashboard,
+    overall_table_rows,
+    triples_figure,
+    type_bars,
+)
 from graphrag.config import get_chat_llm, get_embedding, load_env, neo4j_conf
 from graphrag.graph import TinyGraph
 from graphrag.llm.factory import available_llms, provider_status
@@ -138,6 +145,8 @@ def load_results():
     if not RESULTS.exists():
         return (
             empty,
+            empty,
+            None,
             None,
             None,
             None,
@@ -160,10 +169,22 @@ def load_results():
             )
     type_df = pd.DataFrame(type_rows)
     rows_df = pd.DataFrame(data.get("rows", []))
+    overall_df = pd.DataFrame(overall_table_rows(summary_rows))
+    overall = overall_dashboard(summary_rows)
     bars = compare_bars(summary_rows)
     radar = compare_radar(summary_rows)
     types = type_bars(type_rows)
-    return summary_df, bars, radar, types, type_df, rows_df, "已加载评测：正确率 / 图谱引用 / 速度"
+    return (
+        overall_df,
+        overall,
+        summary_df,
+        bars,
+        radar,
+        types,
+        type_df,
+        rows_df,
+        "已加载：三家 GraphRAG 综合分 + 分项对照",
+    )
 
 
 def question_compare(qid, rows_df):
@@ -230,15 +251,18 @@ with gr.Blocks() as demo:
 
         with gr.Tab("性能对照"):
             gr.Markdown(
-                "对比 **GraphRAG 智能体** 与 **纯生成** 在智谱 / DeepSeek 上的正确率、图谱引用质量和生成速度。"
-                "点「加载评测结果」。速度以最快一路为 1，越高越快。"
+                "综合分只比较三家 **GraphRAG 智能体**（智谱 / DeepSeek / 千问）："
+                "**0.45×正确率 + 0.25×图谱引用 + 0.15×F1 + 0.15×速度**。"
+                "速度以三家里最快为 1。右侧柱为相对同模型纯生成的 Hit@1 提升。"
             )
             refresh = gr.Button("加载评测结果", variant="primary")
             status = gr.Textbox(label="状态", interactive=False)
-            summary_table = gr.Dataframe(label="汇总：Hit@1 / F1 / 引用覆盖 / 时延")
-            bars_plot = gr.Plot(label="正确率 · 图谱质量 · 速度")
+            overall_table = gr.Dataframe(label="三家智能体综合排名")
+            overall_plot = gr.Plot(label="综合能力：排名 · 画像 · 相对纯生成增益")
+            summary_table = gr.Dataframe(label="六路明细：Hit@1 / F1 / 引用 / 时延")
+            bars_plot = gr.Plot(label="分项：正确率 · 图谱质量 · 速度")
             with gr.Row():
-                radar_plot = gr.Plot(label="综合雷达图")
+                radar_plot = gr.Plot(label="六路雷达（含纯生成）")
                 type_plot = gr.Plot(label="题型正确率")
             type_table = gr.Dataframe(label="题型明细")
             rows_table = gr.Dataframe(label="逐题明细")
@@ -247,6 +271,8 @@ with gr.Blocks() as demo:
             refresh.click(
                 load_results,
                 outputs=[
+                    overall_table,
+                    overall_plot,
                     summary_table,
                     bars_plot,
                     radar_plot,

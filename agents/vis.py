@@ -196,6 +196,130 @@ def compare_radar(summary_rows):
     return fig
 
 
+def _with_metrics(rows):
+    lats = [max(float(r.get("latency_ms") or 1), 1) for r in rows]
+    fastest = min(lats) if lats else 1.0
+    scored = []
+    for r in rows:
+        hit = float(r.get("hit") or 0)
+        cite = float(r.get("citation") or 0)
+        f1 = min(float(r.get("f1") or 0), 1.0)
+        speed = fastest / max(float(r.get("latency_ms") or 1), 1)
+        score = 0.45 * hit + 0.25 * cite + 0.15 * f1 + 0.15 * speed
+        item = dict(r)
+        item["speed"] = round(speed, 4)
+        item["score"] = round(score, 4)
+        scored.append(item)
+    scored.sort(key=lambda x: x["score"], reverse=True)
+    for i, item in enumerate(scored, 1):
+        item["rank"] = i
+    return scored
+
+
+def overall_table_rows(summary_rows):
+    """三家 GraphRAG 智能体综合分，供表格展示。"""
+    agents = [r for r in summary_rows if r.get("mode") == "graphrag"]
+    plains = {r["model"]: r for r in summary_rows if r.get("mode") == "plain"}
+    scored = _with_metrics(agents)
+    rows = []
+    for item in scored:
+        plain = plains.get(item["model"]) or {}
+        lift = float(item.get("hit") or 0) - float(plain.get("hit") or 0)
+        rows.append(
+            {
+                "排名": item["rank"],
+                "智能体": LABELS.get(item["model"], item["model"]),
+                "综合分": item["score"],
+                "正确率": round(float(item.get("hit") or 0), 4),
+                "图谱引用": round(float(item.get("citation") or 0), 4),
+                "速度": item["speed"],
+                "相对纯生成提升": round(lift, 4),
+            }
+        )
+    return rows
+
+
+def overall_dashboard(summary_rows):
+    """综合能力：排名柱 + 三家雷达 + 相对纯生成提升。"""
+    import numpy as np
+
+    font = cjk_font()
+    fig, axes = plt.subplots(1, 3, figsize=(13.2, 4.2), gridspec_kw={"width_ratios": [1.1, 1.15, 1.0]})
+    agents = [r for r in summary_rows if r.get("mode") == "graphrag"]
+    scored = _with_metrics(agents)
+    if not scored:
+        for ax in axes:
+            ax.text(0.5, 0.5, "暂无数据", ha="center", fontproperties=font)
+            ax.axis("off")
+        return fig
+
+    colors = {"zhipu": "#c9a227", "deepseek": "#3d6b8c", "qwen": "#a65d3f", "grok": "#5b8c5a"}
+    names = [LABELS.get(r["model"], r["model"]) for r in scored]
+    scores = [r["score"] for r in scored]
+    bar_colors = [colors.get(r["model"], "#888888") for r in scored]
+    y = np.arange(len(scored))[::-1]
+    axes[0].barh(y, scores, color=bar_colors, height=0.55)
+    axes[0].set_yticks(y)
+    axes[0].set_yticklabels(names)
+    _apply_tick_font(axes[0], font, 10)
+    axes[0].set_xlim(0, 1.0)
+    axes[0].set_xlabel("综合分", fontproperties=font)
+    axes[0].set_title("综合能力排名", fontproperties=font)
+    for yi, val in zip(y, scores):
+        axes[0].text(val + 0.02, yi, f"{val:.2f}", va="center", fontproperties=font, fontsize=9)
+
+    axr = fig.add_subplot(1, 3, 2, polar=True)
+    axes[1].remove()
+    axes_names = ["正确率", "答案 F1", "图谱引用", "生成速度"]
+    n_ax = len(axes_names)
+    angles = np.linspace(0, 2 * np.pi, n_ax, endpoint=False).tolist()
+    angles += angles[:1]
+    for r in scored:
+        vals = [
+            float(r.get("hit") or 0),
+            min(float(r.get("f1") or 0), 1.0),
+            float(r.get("citation") or 0),
+            float(r.get("speed") or 0),
+        ]
+        vals += vals[:1]
+        c = colors.get(r["model"], "#888888")
+        label = LABELS.get(r["model"], r["model"])
+        axr.plot(angles, vals, color=c, linewidth=2.2, label=label)
+        axr.fill(angles, vals, color=c, alpha=0.14)
+    axr.set_xticks(angles[:-1])
+    axr.set_xticklabels(axes_names, fontproperties=font, fontsize=9)
+    axr.set_ylim(0, 1.0)
+    axr.set_yticks([0.5, 1.0])
+    axr.legend(loc="upper right", bbox_to_anchor=(1.35, 1.15), prop=font, fontsize=8)
+    axr.set_title("三家综合画像", fontproperties=font, pad=14)
+
+    plains = {r["model"]: r for r in summary_rows if r.get("mode") == "plain"}
+    lifts = []
+    lift_names = []
+    lift_colors = []
+    for r in scored:
+        plain = plains.get(r["model"]) or {}
+        lifts.append(float(r.get("hit") or 0) - float(plain.get("hit") or 0))
+        lift_names.append(LABELS.get(r["model"], r["model"]))
+        lift_colors.append(colors.get(r["model"], "#888888"))
+    x = np.arange(len(lift_names))
+    axes[2].bar(x, lifts, color=lift_colors, width=0.6)
+    axes[2].axhline(0, color="#333", lw=0.8)
+    axes[2].set_xticks(x)
+    axes[2].set_xticklabels(lift_names)
+    _apply_tick_font(axes[2], font, 9)
+    axes[2].set_ylabel("Hit@1 提升", fontproperties=font)
+    axes[2].set_title("相对纯生成的增益", fontproperties=font)
+    fig.suptitle(
+        "综合分 = 0.45×正确率 + 0.25×图谱引用 + 0.15×F1 + 0.15×速度",
+        fontproperties=font,
+        fontsize=11,
+        y=1.02,
+    )
+    fig.tight_layout()
+    return fig
+
+
 def type_bars(type_rows):
     """各题型 Hit@1。"""
     import numpy as np
