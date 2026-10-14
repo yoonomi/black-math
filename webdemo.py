@@ -7,7 +7,7 @@ import gradio as gr
 import pandas as pd
 
 from agents.loop import ask
-from agents.vis import cjk_font, triples_figure
+from agents.vis import compare_bars, compare_radar, triples_figure, type_bars
 from graphrag.config import get_chat_llm, get_embedding, load_env, neo4j_conf
 from graphrag.graph import TinyGraph
 from graphrag.llm.factory import available_llms, provider_status
@@ -136,7 +136,15 @@ def combined_response(history1, history2, user_input, model_label):
 def load_results():
     empty = pd.DataFrame()
     if not RESULTS.exists():
-        return empty, None, empty, empty, "还没有 eval/results.json，请先运行 python eval/run_eval.py"
+        return (
+            empty,
+            None,
+            None,
+            None,
+            empty,
+            empty,
+            "还没有 eval/results.json，请先运行 python eval/run_eval.py",
+        )
     data = json.loads(RESULTS.read_text(encoding="utf-8"))
     summary_rows = []
     for key, val in data.get("summary", {}).items():
@@ -152,22 +160,10 @@ def load_results():
             )
     type_df = pd.DataFrame(type_rows)
     rows_df = pd.DataFrame(data.get("rows", []))
-    chart = None
-    if not summary_df.empty:
-        import matplotlib.pyplot as plt
-
-        font = cjk_font()
-        fig, axes = plt.subplots(1, 2, figsize=(8, 3.2))
-        pivot_hit = summary_df.pivot(index="model", columns="mode", values="hit")
-        pivot_hit.plot(kind="bar", ax=axes[0], rot=0)
-        axes[0].set_title("Hit@1", fontproperties=font)
-        axes[0].set_ylim(0, 1)
-        pivot_lat = summary_df.pivot(index="model", columns="mode", values="latency_ms")
-        pivot_lat.plot(kind="bar", ax=axes[1], rot=0)
-        axes[1].set_title("平均时延 ms", fontproperties=font)
-        fig.tight_layout()
-        chart = fig
-    return summary_df, chart, type_df, rows_df, "已加载评测结果"
+    bars = compare_bars(summary_rows)
+    radar = compare_radar(summary_rows)
+    types = type_bars(type_rows)
+    return summary_df, bars, radar, types, type_df, rows_df, "已加载评测：正确率 / 图谱引用 / 速度"
 
 
 def question_compare(qid, rows_df):
@@ -232,18 +228,33 @@ with gr.Blocks() as demo:
                 ],
             )
 
-        with gr.Tab("性能"):
-            refresh = gr.Button("加载 results.json")
-            summary_table = gr.Dataframe(label="模型 × 模式 汇总")
-            hit_plot = gr.Plot(label="Hit@1 与时延")
-            type_table = gr.Dataframe(label="模型 × 模式 × 题型")
-            rows_table = gr.Dataframe(label="逐题明细")
+        with gr.Tab("性能对照"):
+            gr.Markdown(
+                "对比 **GraphRAG 智能体** 与 **纯生成** 在智谱 / DeepSeek 上的正确率、图谱引用质量和生成速度。"
+                "点「加载评测结果」。速度以最快一路为 1，越高越快。"
+            )
+            refresh = gr.Button("加载评测结果", variant="primary")
             status = gr.Textbox(label="状态", interactive=False)
+            summary_table = gr.Dataframe(label="汇总：Hit@1 / F1 / 引用覆盖 / 时延")
+            bars_plot = gr.Plot(label="正确率 · 图谱质量 · 速度")
+            with gr.Row():
+                radar_plot = gr.Plot(label="综合雷达图")
+                type_plot = gr.Plot(label="题型正确率")
+            type_table = gr.Dataframe(label="题型明细")
+            rows_table = gr.Dataframe(label="逐题明细")
             qid = gr.Textbox(label="题目 id，如 q1", placeholder="q1")
-            compare_table = gr.Dataframe(label="该题三模型对照")
+            compare_table = gr.Dataframe(label="该题各智能体对照")
             refresh.click(
                 load_results,
-                outputs=[summary_table, hit_plot, type_table, rows_table, status],
+                outputs=[
+                    summary_table,
+                    bars_plot,
+                    radar_plot,
+                    type_plot,
+                    type_table,
+                    rows_table,
+                    status,
+                ],
             )
             qid.change(question_compare, inputs=[qid, rows_table], outputs=[compare_table])
 
