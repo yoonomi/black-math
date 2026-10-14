@@ -13,7 +13,7 @@
 | S5 | Gradio 问答页，智谱 / DeepSeek 对照 | 完成 |
 | S6 | Planner / Dual-Retrieval / Verifier | 完成 |
 | S7 | 封闭题集 | 完成（14 题） |
-| S8 | `eval/run_eval.py` | 完成 |
+| S8 | 前三章图重跑 14 题评测 | 完成 |
 | S9 | 性能页表 + Hit@1/时延柱状图 | 完成 |
 | S10 | 全量影神图 | 不做（不挡演示） |
 | S11 | README、设计报告、演示脚本、提交包 | 完成 |

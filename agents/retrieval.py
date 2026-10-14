@@ -59,9 +59,8 @@ def retrieve(subquestion: str, graph: TinyGraph, evidence: Evidence) -> None:
         hops = graph.graph_query(name, hops=2)
         evidence.triples.extend(hops)
 
-    if (not use_graph) or not evidence.triples:
-        try:
-            ctx = graph.build_local_query_context(subquestion)
-            evidence.chunks.append(ctx)
-        except Exception as e:
-            evidence.notes.append(f"local 检索失败: {e}")
+    try:
+        ctx = graph.build_local_query_context(subquestion)
+        evidence.chunks.append(ctx)
+    except Exception as e:
+        evidence.notes.append(f"local 检索失败: {e}")
