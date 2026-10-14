@@ -143,6 +143,37 @@ def set_three_line(table):
         shade_header(cell)
 
 
+def set_box_borders(table):
+    tbl = table._tbl
+    tblPr = tbl.tblPr if tbl.tblPr is not None else OxmlElement("w:tblPr")
+    borders = OxmlElement("w:tblBorders")
+    for edge in ("top", "left", "bottom", "right", "insideH", "insideV"):
+        el = OxmlElement(f"w:{edge}")
+        el.set(qn("w:val"), "single")
+        el.set(qn("w:sz"), "4")
+        el.set(qn("w:space"), "0")
+        el.set(qn("w:color"), "000000")
+        borders.append(el)
+    tblPr.append(borders)
+
+
+def add_flow_table(doc, headers, rows):
+    """用表格代替等宽字符框图，避免 Word 中错位。"""
+    table = doc.add_table(rows=1 + len(rows), cols=len(headers))
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    table.autofit = True
+    for i, h in enumerate(headers):
+        set_cell_font(table.rows[0].cells[i], h, bold=True, size=10.5, center=True)
+        shade_header(table.rows[0].cells[i])
+    for r, row in enumerate(rows):
+        for c, val in enumerate(row):
+            center = c == 0
+            set_cell_font(table.rows[r + 1].cells[c], str(val), size=9, center=center)
+    set_box_borders(table)
+    doc.add_paragraph().paragraph_format.space_after = Pt(4)
+    return table
+
+
 def add_table(doc, headers, rows, col_widths=None):
     table = doc.add_table(rows=1 + len(rows), cols=len(headers))
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
@@ -223,20 +254,33 @@ def build():
 
     h1(doc, "2．系统详细设计")
     h2(doc, "2.1 总体目标与模块划分")
-    body(doc, "系统分为交互层、智能体层、图谱层与评测层。模块划分如图 1 所示。")
-    pre(
+    body(doc, "系统分为交互层、智能体层、图谱层与评测层。自上而下的调用关系如图 1 所示。")
+    add_flow_table(
         doc,
-        "Gradio 网页\n"
-        "  问答页：选择模型 → 图谱问答 ‖ 同模型纯生成（并行）\n"
-        "  性能页：读取评测结果 → 综合排名 / 雷达 / 分项图\n"
-        "        │\n"
-        "模型工厂    智谱 · DeepSeek · 千问\n"
-        "        │\n"
-        "智能体循环  规划器 → 双路检索 → 成答器 → 校验器（最多 4 轮）\n"
-        "        │\n"
-        "TinyGraph   原文邻域检索 + 模板图查询（1～3 步）\n"
-        "        │\n"
-        "Neo4j       实体 / 关系 + embedding-3（建图固定智谱）",
+        ["层次", "组成", "数据流"],
+        [
+            [
+                "交互层",
+                "Gradio 网页",
+                "问答页选择模型后，图谱问答与同模型纯生成并行；性能页读取评测结果，展示综合排名、雷达图与分项图",
+            ],
+            ["模型层", "模型工厂", "智谱、DeepSeek、千问，统一聊天接口"],
+            [
+                "智能体层",
+                "查询循环",
+                "规划器 → 双路检索 → 成答器 → 校验器，最多 4 轮",
+            ],
+            [
+                "图谱层",
+                "TinyGraph",
+                "原文邻域检索，以及按实体名的 1～3 步模板图查询",
+            ],
+            [
+                "存储层",
+                "Neo4j",
+                "实体与关系；建图向量固定为智谱 embedding-3",
+            ],
+        ],
     )
     caption_fig(doc, "图1 系统模块结构")
     body(doc, "各模块职责见表 1。")
@@ -261,15 +305,18 @@ def build():
         doc,
         "建图沿用 TinyGraph，按角色切块，避免固定字数滑窗把同一人物拆碎。处理流程如图 2 所示。",
     )
-    pre(
+    add_flow_table(
         doc,
-        "影神图 Markdown\n"
-        "    → 按「影神图角色」切块\n"
-        "    → 对每个新块：抽取实体、抽取三元组\n"
-        "    → MERGE 写入 Neo4j（同名合并）\n"
-        "    → 社区发现（有图数据科学插件则 Leiden，否则单社区回退）\n"
-        "    → 实体描述向量化（embedding-3）\n"
-        "    → 标记文档已加载，支持增量补块",
+        ["步骤", "处理内容"],
+        [
+            ["1", "读入影神图 Markdown"],
+            ["2", "按「影神图角色」切块，一人一块"],
+            ["3", "对每个新块抽取实体与三元组"],
+            ["4", "按同名合并，写入 Neo4j"],
+            ["5", "社区发现（有插件则 Leiden，否则单社区回退）"],
+            ["6", "实体描述向量化（embedding-3）"],
+            ["7", "标记文档已加载，支持增量补块"],
+        ],
     )
     caption_fig(doc, "图2 建图处理流程")
     body(
@@ -286,16 +333,20 @@ def build():
         doc,
         "一次提问的控制流程如图 3 所示。这是相对原仓库的核心增量：原项目一次局部检索即生成；本系统把「要想什么、去哪查、答完核不核」拆成四个角色。",
     )
-    pre(
+    add_flow_table(
         doc,
-        "用户问题\n"
-        "    → 规划器：直接作答 或 追加子问题\n"
-        "    → 双路检索\n"
-        "          关系词（部下、交手、位于、交好等）→ 模板图查询 1～3 步\n"
-        "          生平 / 身份 / 始终拼接 → 原文邻域\n"
-        "    → 成答器：只用证据写 1～2 句通顺中文\n"
-        "    → 校验器：足够则结束；不足则回到规划器（最多 4 轮）\n"
-        "    → 返回：答案、子问题路径、实体、三元组（画检索子图）",
+        ["步骤", "角色", "作用"],
+        [
+            ["1", "规划器", "判断直接作答，或追加子问题"],
+            [
+                "2",
+                "双路检索",
+                "关系类（部下、交手、位于等）走 1～3 步模板图查询；生平与身份取原文邻域，并始终拼接原文",
+            ],
+            ["3", "成答器", "只用证据写 1～2 句通顺中文"],
+            ["4", "校验器", "证据足够则结束；不足则回到规划器，最多 4 轮"],
+            ["5", "输出", "答案、子问题路径、实体与三元组，并绘制检索子图"],
+        ],
     )
     caption_fig(doc, "图3 查询期智能体流程")
     body(doc, "共享证据集字段见表 2。")
