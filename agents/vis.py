@@ -96,6 +96,7 @@ def triples_figure(triples: List[Dict[str, Any]], title: str = "检索子图"):
 LABELS = {
     "zhipu": "智谱",
     "deepseek": "DeepSeek",
+    "qwen": "千问",
     "grok": "Grok",
     "graphrag": "GraphRAG",
     "plain": "纯生成",

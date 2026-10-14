@@ -8,6 +8,7 @@ from .zhipu import zhipuLLM
 PROVIDERS = {
     "zhipu": {"env": "ZHIPU_API_KEY", "model_env": "ZHIPU_MODEL", "default_model": "glm-4-flash"},
     "deepseek": {"env": "DEEPSEEK_API_KEY", "model_env": "DEEPSEEK_MODEL", "default_model": "deepseek-chat"},
+    "qwen": {"env": "DASHSCOPE_API_KEY", "model_env": "QWEN_MODEL", "default_model": "qwen3.5-plus"},
     "grok": {"env": "XAI_API_KEY", "model_env": "GROK_MODEL", "default_model": "grok-4"},
 }
 
@@ -35,6 +36,10 @@ def get_llm(name: str, model_name: Optional[str] = None) -> BaseLLM:
         from .deepseek import DeepSeekLLM
 
         return DeepSeekLLM(model, api_key)
+    if key == "qwen":
+        from .qwen import QwenLLM
+
+        return QwenLLM(model, api_key)
     from .grok import GrokLLM
 
     return GrokLLM(model, api_key)

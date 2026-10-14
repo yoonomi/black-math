@@ -27,7 +27,7 @@ chat_llms = {}
 def _label_map():
     status = provider_status()
     labels = []
-    mapping = {"智谱": "zhipu", "DeepSeek": "deepseek", "Grok": "grok"}
+    mapping = {"智谱": "zhipu", "DeepSeek": "deepseek", "千问": "qwen", "Grok": "grok"}
     for zh, key in mapping.items():
         if status.get(key):
             labels.append(zh)
