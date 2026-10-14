@@ -1,3 +1,4 @@
+import re
 import time
 from typing import Any, Dict
 
@@ -11,15 +12,32 @@ from .retrieval import retrieve
 from .verifier import verify
 
 
-SYNTH_PROMPT = """你是《黑神话：悟空》影神图助手，自称小神。根据证据用一两句中文直接回答。
-优先用原文块里的称呼与身份（如土地公、黑熊精、狼妖、杨戬）。
-证据不全时仍根据已有内容作答，不要说「影神图未记载」，除非完全没有任何相关实体。
-回答中点名用到的实体。
+SYNTH_PROMPT = """你是《黑神话：悟空》影神图解说。只根据下面的设定回答用户的问题。
+
+写作要求：
+1. 只用完整通顺的中文，一两句说完，像人口述，不要病句、不要分号堆砌。
+2. 问什么答什么。例如问「分别管哪座山」，只说黑风山土地管黑风山、黄风岭土地管黄风岭，不要夹带灵吉菩萨等无关人物。
+3. 禁止出现这些字样：证据提到、根据三元组、原文显示、子问题、hop、fact、compare、FOLLOWUP。
+4. 不要复述检索过程，不要列举没用上的关系。
+5. 优先游戏影神图设定，不要改写成《西游记》课文。
+6. 称呼用原文：土地公、黑熊精、狼妖、杨戬等。
 
 问题: {query}
-证据:
+
+可用设定:
 {evidence}
 """
+
+
+def clean_answer(text: str) -> str:
+    t = (text or "").strip()
+    t = re.sub(r"^(hop|fact|compare|answer|followup)[:：\s]+", "", t, flags=re.I)
+    for sep in ("证据提到", "证据：", "证据:", "根据三元组", "原文显示", "子问题:"):
+        if sep in t:
+            t = t.split(sep, 1)[0]
+    t = t.strip("；;，, \n")
+    t = re.sub(r"\n{3,}", "\n\n", t)
+    return t.strip()
 
 
 def ask(query: str, graph: TinyGraph, llm: BaseLLM, max_rounds: int = 4) -> Dict[str, Any]:
@@ -34,7 +52,9 @@ def ask(query: str, graph: TinyGraph, llm: BaseLLM, max_rounds: int = 4) -> Dict
         rounds += 1
         sub = queue.pop(0) if queue else query
         retrieve(sub, graph, evidence)
-        draft = llm.predict(SYNTH_PROMPT.format(query=query, evidence=evidence.as_prompt()))
+        draft = clean_answer(
+            llm.predict(SYNTH_PROMPT.format(query=query, evidence=evidence.as_prompt()))
+        )
         mark = verify(query, draft, evidence, llm)
         if mark == "OK":
             break
@@ -47,11 +67,14 @@ def ask(query: str, graph: TinyGraph, llm: BaseLLM, max_rounds: int = 4) -> Dict
         if nxt.startswith("FOLLOWUP:"):
             queue.append(nxt.split(":", 1)[1].strip())
 
+    draft = clean_answer(draft)
     if not draft:
         try:
-            draft = graph.local_query(query)
+            draft = clean_answer(graph.local_query(query))
         except Exception:
-            draft = llm.predict(LOCAL_QUERY.format(query=query, context=evidence.as_prompt()))
+            draft = clean_answer(
+                llm.predict(LOCAL_QUERY.format(query=query, context=evidence.as_prompt()))
+            )
 
     return {
         "answer": draft,

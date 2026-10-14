@@ -12,17 +12,32 @@ class Evidence:
 
     def as_prompt(self) -> str:
         lines = []
-        if self.subquestions:
-            lines.append("子问题: " + " | ".join(self.subquestions))
-        if self.entities:
-            lines.append("实体: " + ", ".join(e.get("name", "") for e in self.entities))
-        if self.triples:
-            lines.append(
-                "三元组: "
-                + "; ".join(f"{t.get('src')}-{t.get('rel')}-{t.get('dst')}" for t in self.triples)
-            )
-        if self.chunks:
-            lines.append("原文: " + "\n".join(self.chunks[:6]))
-        if self.notes:
-            lines.append("备注: " + " ".join(self.notes))
+        names = []
+        for e in self.entities:
+            n = (e.get("name") or "").strip()
+            if n and n not in names:
+                names.append(n)
+        if names:
+            lines.append("相关人物: " + "、".join(names[:12]))
+        seen = []
+        for t in self.triples:
+            rel = (t.get("rel") or "").strip()
+            if rel in {"", "是", "为"}:
+                continue
+            key = f"{t.get('src')}-{rel}-{t.get('dst')}"
+            if key not in seen:
+                seen.append(key)
+            if len(seen) >= 10:
+                break
+        if seen:
+            lines.append("关系: " + "；".join(seen))
+        texts = []
+        for chunk in self.chunks[:2]:
+            piece = (chunk or "").strip()
+            if len(piece) > 700:
+                piece = piece[:700] + "…"
+            if piece:
+                texts.append(piece)
+        if texts:
+            lines.append("设定摘录:\n" + "\n".join(texts))
         return "\n".join(lines) if lines else "暂无证据"
